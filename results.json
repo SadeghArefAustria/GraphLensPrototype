@@ -1,0 +1,116 @@
+{
+  "entities": [
+    {
+      "name": "TU Graz",
+      "type": "ORG",
+      "description": "A technical university in Graz, Austria, partnering with Magna on the driving simulator project."
+    },
+    {
+      "name": "Magna",
+      "type": "ORG",
+      "description": "A mobility technology company that partnered with TU Graz and funded the simulator's acquisition and installation."
+    },
+    {
+      "name": "Advanced Driving Simulation Center",
+      "type": "PRODUCT",
+      "description": "A new facility on Campus Inffeldgasse housing one of the world's most sophisticated driving simulators."
+    },
+    {
+      "name": "Campus Inffeldgasse",
+      "type": "LOCATION",
+      "description": "The campus location where the Advanced Driving Simulation Center is situated."
+    },
+    {
+      "name": "Horst Bischof",
+      "type": "PERSON",
+      "description": "Rector of TU Graz who described the center as a result of the partnership with Magna."
+    },
+    {
+      "name": "Arno Eichberger",
+      "type": "PERSON",
+      "description": "Head of the Institute of Automotive Engineering, responsible for the scientific operation of the testing facility."
+    },
+    {
+      "name": "Institute of Automotive Engineering",
+      "type": "ORG",
+      "description": "The TU Graz institute headed by Arno Eichberger overseeing the simulator's scientific operation."
+    },
+    {
+      "name": "Advanced Driver Assistance Systems",
+      "type": "CONCEPT",
+      "description": "Vehicle systems (ADAS) that can be tested and optimised using the simulator."
+    },
+    {
+      "name": "Austria",
+      "type": "LOCATION",
+      "description": "The country positioned as an automotive and mobility centre enhanced by the new simulator."
+    },
+    {
+      "name": "Europe",
+      "type": "LOCATION",
+      "description": "The continent in which the research infrastructure is described as unique."
+    }
+  ],
+  "relations": [
+    {
+      "subject": "TU Graz",
+      "predicate": "PARTNERED_WITH",
+      "object": "Magna",
+      "evidence": "the decades-long innovation partnership between Magna and TU Graz"
+    },
+    {
+      "subject": "Advanced Driving Simulation Center",
+      "predicate": "LOCATED_IN",
+      "object": "Campus Inffeldgasse",
+      "evidence": "the new Advanced Driving Simulation Center on Campus Inffeldgasse"
+    },
+    {
+      "subject": "Magna",
+      "predicate": "FUNDED",
+      "object": "Advanced Driving Simulation Center",
+      "evidence": "Magna covered the acquisition and installation costs"
+    },
+    {
+      "subject": "TU Graz",
+      "predicate": "FINANCES",
+      "object": "Advanced Driving Simulation Center",
+      "evidence": "TU Graz is financing the ongoing running of the Advanced Driving Simulation Center"
+    },
+    {
+      "subject": "Horst Bischof",
+      "predicate": "RECTOR_OF",
+      "object": "TU Graz",
+      "evidence": "says TU Graz Rector Horst Bischof"
+    },
+    {
+      "subject": "Arno Eichberger",
+      "predicate": "HEAD_OF",
+      "object": "Institute of Automotive Engineering",
+      "evidence": "Arno Eichberger, Head of the Institute of Automotive Engineering"
+    },
+    {
+      "subject": "Arno Eichberger",
+      "predicate": "RESPONSIBLE_FOR",
+      "object": "Advanced Driving Simulation Center",
+      "evidence": "responsible for the scientific operation of the testing facility"
+    },
+    {
+      "subject": "Institute of Automotive Engineering",
+      "predicate": "PART_OF",
+      "object": "TU Graz",
+      "evidence": "the Institute of Automotive Engineering at TU Graz"
+    },
+    {
+      "subject": "Advanced Driving Simulation Center",
+      "predicate": "TESTS",
+      "object": "Advanced Driver Assistance Systems",
+      "evidence": "realistically test and optimise ... various advanced driver assistance systems (ADAS)"
+    },
+    {
+      "subject": "Advanced Driving Simulation Center",
+      "predicate": "ENHANCES",
+      "object": "Austria",
+      "evidence": "will sustainably enhance Austria as an automotive and mobility centre"
+    }
+  ]
+}
