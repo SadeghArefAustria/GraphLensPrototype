@@ -7,6 +7,10 @@ Usage
     python scripts/extract_kg.py <pdf> --out data/output/results.json
     python scripts/extract_kg.py --file-id file_011ABC...        # reuse upload
     python scripts/extract_kg.py <pdf> --keep-file               # don't delete from Files API
+    python scripts/extract_kg.py <pdf> --domain "academic research"
+    python scripts/extract_kg.py <pdf> --verify                  # second pass, ~2x tokens
+    python scripts/extract_kg.py <pdf> --out data/output/results.json --save-text
+    python scripts/extract_kg.py <pdf> --chunk-pages 5 --save-chunks  # per-chunk extraction
 """
 
 import argparse
@@ -16,7 +20,7 @@ from pathlib import Path
 
 import anthropic
 
-from graphlens.extractor import upload_pdf, extract, pretty_print
+from graphlens.extractor import upload_pdf, extract, pretty_print, format_result
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,6 +43,41 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not delete the uploaded file from the Files API after extraction.",
     )
+    parser.add_argument(
+        "--domain",
+        metavar="DOMAIN",
+        help='Optional domain hint, e.g. "academic research", "news" (default: none).',
+    )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Run a second pass to catch missed entities/relations (~2x token usage).",
+    )
+    parser.add_argument(
+        "--save-text",
+        action="store_true",
+        help=(
+            "Also save the pretty-printed entities/relations to a .txt file "
+            "alongside the JSON output (requires --out)."
+        ),
+    )
+    parser.add_argument(
+        "--chunk-pages",
+        type=int,
+        metavar="N",
+        help=(
+            "Split the PDF into chunks of N pages each and extract from each "
+            "separately for finer-grained recall (requires a PDF path, not --file-id)."
+        ),
+    )
+    parser.add_argument(
+        "--save-chunks",
+        action="store_true",
+        help=(
+            "With --chunk-pages, save each page-range chunk as chunk_NNN.pdf and "
+            "its extraction as chunk_NNN_extraction.txt under <stem>_chunks/."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -49,21 +88,41 @@ def main() -> None:
         print("Error: provide a PDF path or --file-id.", file=sys.stderr)
         sys.exit(1)
 
+    if args.chunk_pages and not args.pdf:
+        print(
+            "Error: --chunk-pages requires a PDF path (not --file-id alone).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if args.pdf and not Path(args.pdf).is_file():
+        print(f"Error: file not found: {args.pdf}", file=sys.stderr)
+        sys.exit(1)
+
     client = anthropic.Anthropic()
 
-    file_id      = args.file_id
-    uploaded_now = False
+    file_id         = args.file_id
+    uploaded_now    = False
+    needs_whole_pdf = not args.chunk_pages or args.verify
 
-    if not file_id:
-        pdf_path = Path(args.pdf)
-        if not pdf_path.is_file():
-            print(f"Error: file not found: {pdf_path}", file=sys.stderr)
-            sys.exit(1)
-        file_id = upload_pdf(client, pdf_path)
+    if not file_id and needs_whole_pdf:
+        file_id      = upload_pdf(client, Path(args.pdf))
         uploaded_now = True
 
+    chunk_dir = None
+    if args.save_chunks and args.chunk_pages:
+        base      = Path(args.out) if args.out else Path(args.pdf)
+        chunk_dir = base.parent / f"{base.stem}_chunks"
+
     try:
-        result = extract(client, file_id)
+        result = extract(
+            client, file_id,
+            domain=args.domain,
+            verify=args.verify,
+            pdf_path=args.pdf,
+            chunk_pages=args.chunk_pages,
+            chunk_dir=chunk_dir,
+        )
     finally:
         if uploaded_now and not args.keep_file:
             try:
@@ -80,8 +139,15 @@ def main() -> None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json_output, encoding="utf-8")
         print(f"Results written to {out_path}", file=sys.stderr)
+
+        if args.save_text:
+            txt_path = out_path.with_suffix(".txt")
+            txt_path.write_text(format_result(result), encoding="utf-8")
+            print(f"Text summary written to {txt_path}", file=sys.stderr)
     else:
         print(json_output)
+        if args.save_text:
+            print("Warning: --save-text requires --out; skipping.", file=sys.stderr)
 
 
 if __name__ == "__main__":

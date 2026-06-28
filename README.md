@@ -84,6 +84,10 @@ cp .env.example .env      # macOS / Linux
 # Extract KG from a PDF
 python scripts/extract_kg.py data/input/paper.pdf --out data/output/results.json
 
+# Split into 5-page chunks for finer-grained recall, saving each chunk + its extraction
+python scripts/extract_kg.py data/input/paper.pdf --out data/output/results.json \
+    --chunk-pages 5 --save-chunks
+
 # Load into Neo4j
 python scripts/load_to_neo4j.py data/output/results.json --password your-password
 

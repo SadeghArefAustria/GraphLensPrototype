@@ -143,6 +143,14 @@ def parse_args() -> argparse.Namespace:
             "The text file gets the same name as the JSON but with a .txt extension."
         ),
     )
+    parser.add_argument(
+        "--save-chunks", action="store_true",
+        help=(
+            "Save each chunk's text and its extracted entities/relations under "
+            "<stem>_chunks/chunk_NNN.txt and chunk_NNN_extraction.txt, one folder "
+            "per page."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -191,8 +199,19 @@ def main() -> None:
     client = anthropic.Anthropic()
     kg_results: list[tuple[ScrapedPage, dict]] = []
 
+    if args.out:
+        base_dir = Path(args.out).parent
+    elif args.out_dir:
+        base_dir = Path(args.out_dir)
+    else:
+        base_dir = Path("data/output")
+
     for page in successful:
-        result = extract_from_text(client, page.text, title=page.title)
+        chunk_dir = (
+            base_dir / f"{_url_to_filename(page.url)}_chunks"
+            if args.save_chunks else None
+        )
+        result = extract_from_text(client, page.text, title=page.title, chunk_dir=chunk_dir)
         pretty_print(result)
         kg_results.append((page, result))
 
