@@ -21,6 +21,7 @@ from pathlib import Path
 import anthropic
 
 from graphlens.extractor import upload_pdf, extract, pretty_print, format_result
+from graphlens.metadata import doc_id_for_file
 
 
 def parse_args() -> argparse.Namespace:
@@ -130,6 +131,9 @@ def main() -> None:
                 print(f"Deleted remote file {file_id}.", file=sys.stderr)
             except Exception as exc:
                 print(f"Warning: could not delete {file_id}: {exc}", file=sys.stderr)
+
+    if args.pdf:
+        result = {"doc_id": doc_id_for_file(args.pdf), **result}
 
     pretty_print(result)
 

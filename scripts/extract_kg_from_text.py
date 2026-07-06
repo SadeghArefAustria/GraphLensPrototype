@@ -26,6 +26,7 @@ from pathlib import Path
 import anthropic
 
 from graphlens.extractor import extract_from_text, pretty_print, format_result
+from graphlens.metadata import doc_id_for_file
 
 
 def parse_args() -> argparse.Namespace:
@@ -91,6 +92,16 @@ def parse_args() -> argparse.Namespace:
             "chunk_NNN_extraction.txt under <stem>_chunks/."
         ),
     )
+    parser.add_argument(
+        "--doc-id-source",
+        metavar="PATH",
+        help=(
+            "File to hash for the output's doc_id (default: the input .txt "
+            "itself). Pass the original PDF here so the doc_id matches the "
+            "one in that PDF's metadata record from scripts/pdf_metadata.py, "
+            "letting the two be joined later."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -128,6 +139,9 @@ def main() -> None:
         chunk_dir=chunk_dir,
         **kwargs,
     )
+
+    doc_id_source = Path(args.doc_id_source) if args.doc_id_source else text_path
+    result = {"doc_id": doc_id_for_file(doc_id_source), **result}
 
     pretty_print(result)
 

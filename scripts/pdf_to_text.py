@@ -30,7 +30,10 @@ def parse_args() -> argparse.Namespace:
 def extract_text(pdf_path: Path) -> str:
     reader = PdfReader(str(pdf_path))
     pages = [page.extract_text() or "" for page in reader.pages]
-    return "\n\n".join(pages)
+    # Form-feed page separator (matching pdftotext's convention) so page
+    # boundaries survive into the .txt file and downstream tools (e.g.
+    # graphlens.extractor's provenance resolution) can recover page numbers.
+    return "\f".join(pages)
 
 
 def main() -> None:

@@ -30,10 +30,24 @@ Entity extraction rules:
 ## Relations
 Extract EVERY relation between entities — both explicit and clearly implied.
 For each relation provide:
-- subject   : entity name (must be in the entities list)
-- predicate : short label in SCREAMING_SNAKE_CASE (e.g. WORKS_FOR, FUNDED_BY, PART_OF)
-- object    : entity name (must be in the entities list)
-- evidence  : verbatim quote or close paraphrase from the document
+- subject         : entity name (must be in the entities list)
+- predicate       : short label in SCREAMING_SNAKE_CASE (e.g. WORKS_FOR, FUNDED_BY, PART_OF)
+- object          : entity name (must be in the entities list)
+- source_sentence : ONE single, contiguous sentence from the document — verbatim, or a
+                     close paraphrase of that one sentence — that states the relation.
+                     This is the passage-level provenance for the relation, so it must be
+                     locatable as a real span of the document text. Never splice together
+                     fragments from two different sentences (e.g. with "...") into one
+                     source_sentence, and never summarize across multiple sentences — if
+                     several sentences together support the relation, pick the single one
+                     that most directly and completely supports it on its own.
+- confidence      : your own confidence that this relation is correctly and precisely
+                     supported by source_sentence, from 0.0 to 1.0. Use roughly:
+                     0.9-1.0 for an explicit, unambiguous statement; 0.6-0.85 for a
+                     relation that requires a small amount of paraphrase or co-reference
+                     resolution; 0.3-0.55 for a relation that is only weakly or
+                     indirectly implied. Never output a relation you would rate below 0.3
+                     — if it's that uncertain, leave it out instead.
 
 Relation extraction rules:
 - Check the relation vocabulary below FIRST and reuse an existing predicate whenever it
@@ -42,10 +56,10 @@ Relation extraction rules:
   and keep it generic and reusable (e.g. SUPPLIES, not SUPPLIES_SENSORS_TO_MAGNA_2024) so
   it can recur naturally in other documents.
 - Extract transitive/implicit relations when they are clearly supported by the text.
-- Do NOT fabricate relations — every relation must have an evidence quote.
+- Do NOT fabricate relations — every relation must have a source_sentence quote.
 - De-duplicate: if the same (subject, predicate, object) triple is supported by more
   than one sentence, emit it only once. Prefer the clearest or most specific sentence
-  as the evidence quote; do not repeat the triple with different evidence strings."""
+  as source_sentence; do not repeat the triple with different source_sentence strings."""
 
 _RELATION_VOCABULARY = """
 
@@ -182,15 +196,15 @@ Correct output:
     {"name": "2030", "type": "DATE", "description": "Year by which demand for vehicle-in-the-loop simulation is projected to grow significantly."}
   ],
   "relations": [
-    {"subject": "AVL List GmbH", "predicate": "HEADQUARTERED_IN", "object": "Graz", "evidence": "AVL List GmbH, headquartered in Graz, Austria"},
-    {"subject": "Graz", "predicate": "LOCATED_IN", "object": "Austria", "evidence": "headquartered in Graz, Austria"},
-    {"subject": "AVL List GmbH", "predicate": "DEVELOPS", "object": "AVL DRIVINGCUBE", "evidence": "develops the AVL DRIVINGCUBE™ driving simulator"},
-    {"subject": "Magna International", "predicate": "USES", "object": "AVL DRIVINGCUBE", "evidence": "Magna International uses the system to test driver-assistance software"},
-    {"subject": "AVL List GmbH", "predicate": "FOUNDED_BY", "object": "Hans List", "evidence": "AVL was founded by Hans List in 1948"},
-    {"subject": "AVL List GmbH", "predicate": "PARTNERED_WITH", "object": "TU Graz", "evidence": "AVL partnered with TU Graz on a joint research project"},
-    {"subject": "TU Graz", "predicate": "FUNDED_BY", "object": "Austrian Research Promotion Agency (FFG)", "evidence": "TU Graz received €2.1M in funding from the Austrian Research Promotion Agency (FFG) for the work"},
-    {"subject": "Europe", "predicate": "GROWING_DEMAND_FOR", "object": "Vehicle-in-the-Loop Simulation", "evidence": "demand for vehicle-in-the-loop simulation to grow significantly across Europe by 2030"},
-    {"subject": "Vehicle-in-the-Loop Simulation", "predicate": "PROJECTED_BY", "object": "2030", "evidence": "expect demand ... to grow significantly across Europe by 2030"}
+    {"subject": "AVL List GmbH", "predicate": "HEADQUARTERED_IN", "object": "Graz", "source_sentence": "AVL List GmbH, headquartered in Graz, Austria, develops the AVL DRIVINGCUBE™ driving simulator.", "confidence": 0.98},
+    {"subject": "Graz", "predicate": "LOCATED_IN", "object": "Austria", "source_sentence": "AVL List GmbH, headquartered in Graz, Austria, develops the AVL DRIVINGCUBE™ driving simulator.", "confidence": 0.9},
+    {"subject": "AVL List GmbH", "predicate": "DEVELOPS", "object": "AVL DRIVINGCUBE", "source_sentence": "AVL List GmbH, headquartered in Graz, Austria, develops the AVL DRIVINGCUBE™ driving simulator.", "confidence": 0.98},
+    {"subject": "Magna International", "predicate": "USES", "object": "AVL DRIVINGCUBE", "source_sentence": "Magna International uses the system to test driver-assistance software before road trials.", "confidence": 0.95},
+    {"subject": "AVL List GmbH", "predicate": "FOUNDED_BY", "object": "Hans List", "source_sentence": "AVL was founded by Hans List in 1948.", "confidence": 0.98},
+    {"subject": "AVL List GmbH", "predicate": "PARTNERED_WITH", "object": "TU Graz", "source_sentence": "In 2024, AVL partnered with TU Graz on a joint research project.", "confidence": 0.95},
+    {"subject": "TU Graz", "predicate": "FUNDED_BY", "object": "Austrian Research Promotion Agency (FFG)", "source_sentence": "TU Graz received €2.1M in funding from the Austrian Research Promotion Agency (FFG) for the work.", "confidence": 0.95},
+    {"subject": "Europe", "predicate": "GROWING_DEMAND_FOR", "object": "Vehicle-in-the-Loop Simulation", "source_sentence": "Industry analysts expect demand for vehicle-in-the-loop simulation to grow significantly across Europe by 2030, driven by tightening ADAS validation requirements.", "confidence": 0.75},
+    {"subject": "Vehicle-in-the-Loop Simulation", "predicate": "PROJECTED_BY", "object": "2030", "source_sentence": "Industry analysts expect demand for vehicle-in-the-loop simulation to grow significantly across Europe by 2030, driven by tightening ADAS validation requirements.", "confidence": 0.75}
   ]
 }
 ```
@@ -235,11 +249,11 @@ Correct output:
     {"name": "86.1% accuracy on OGB-Products", "type": "CONCEPT", "description": "Accuracy achieved by the baseline GraphSAGE model on the OGB-Products benchmark."}
   ],
   "relations": [
-    {"subject": "GraphSAGE-X: Attention-Weighted Aggregation for Graph Neural Networks", "predicate": "PROPOSES", "object": "GraphSAGE-X", "evidence": "We propose GraphSAGE-X, a graph neural network that extends GraphSAGE"},
-    {"subject": "GraphSAGE-X", "predicate": "EVALUATED_ON", "object": "OGB-Products", "evidence": "We evaluate GraphSAGE-X on the OGB-Products benchmark"},
-    {"subject": "GraphSAGE-X", "predicate": "ACHIEVES", "object": "89.4% accuracy on OGB-Products", "evidence": "it achieves 89.4% accuracy"},
-    {"subject": "GraphSAGE", "predicate": "ACHIEVES", "object": "86.1% accuracy on OGB-Products", "evidence": "the baseline GraphSAGE model (86.1% accuracy)"},
-    {"subject": "GraphSAGE-X", "predicate": "OUTPERFORMS", "object": "GraphSAGE", "evidence": "outperforming the baseline GraphSAGE model (86.1% accuracy) by 3.3 points"}
+    {"subject": "GraphSAGE-X: Attention-Weighted Aggregation for Graph Neural Networks", "predicate": "PROPOSES", "object": "GraphSAGE-X", "source_sentence": "We propose GraphSAGE-X, a graph neural network that extends GraphSAGE with an attention-weighted aggregation step.", "confidence": 0.97},
+    {"subject": "GraphSAGE-X", "predicate": "EVALUATED_ON", "object": "OGB-Products", "source_sentence": "We evaluate GraphSAGE-X on the OGB-Products benchmark, where it achieves 89.4% accuracy, outperforming the baseline GraphSAGE model (86.1% accuracy) by 3.3 points.", "confidence": 0.95},
+    {"subject": "GraphSAGE-X", "predicate": "ACHIEVES", "object": "89.4% accuracy on OGB-Products", "source_sentence": "We evaluate GraphSAGE-X on the OGB-Products benchmark, where it achieves 89.4% accuracy, outperforming the baseline GraphSAGE model (86.1% accuracy) by 3.3 points.", "confidence": 0.97},
+    {"subject": "GraphSAGE", "predicate": "ACHIEVES", "object": "86.1% accuracy on OGB-Products", "source_sentence": "We evaluate GraphSAGE-X on the OGB-Products benchmark, where it achieves 89.4% accuracy, outperforming the baseline GraphSAGE model (86.1% accuracy) by 3.3 points.", "confidence": 0.95},
+    {"subject": "GraphSAGE-X", "predicate": "OUTPERFORMS", "object": "GraphSAGE", "source_sentence": "We evaluate GraphSAGE-X on the OGB-Products benchmark, where it achieves 89.4% accuracy, outperforming the baseline GraphSAGE model (86.1% accuracy) by 3.3 points.", "confidence": 0.95}
   ]
 }
 ```
@@ -357,7 +371,7 @@ under-extracts because they read as narrative rather than as a clean named-entit
 Do not flag missing citation/reference-list material (cited papers, their authors, or
 citation markers) — that is out of scope by design, not a miss.
 Before including a relation, check it is not already present in the first pass under
-the same (subject, predicate, object) triple, even if the evidence sentence differs.
+the same (subject, predicate, object) triple, even if the source_sentence differs.
 Apply the same standard to research gaps: only report a gap if it is not already
 present in the first pass, and never infer one the document doesn't state or
 clearly imply."""
@@ -465,12 +479,25 @@ EXTRACTION_TOOL_SCHEMA = {
                             "type": "string",
                             "description": "Entity name; must appear in `entities`.",
                         },
-                        "evidence": {
+                        "source_sentence": {
                             "type": "string",
-                            "description": "Verbatim quote or close paraphrase.",
+                            "description": (
+                                "Verbatim sentence (or close paraphrase) from the "
+                                "document stating the relation. Passage-level "
+                                "provenance for this relation."
+                            ),
+                        },
+                        "confidence": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0,
+                            "description": (
+                                "Self-assessed confidence that source_sentence "
+                                "precisely supports this relation."
+                            ),
                         },
                     },
-                    "required": ["subject", "predicate", "object", "evidence"],
+                    "required": ["subject", "predicate", "object", "source_sentence", "confidence"],
                     "additionalProperties": False,
                 },
             },

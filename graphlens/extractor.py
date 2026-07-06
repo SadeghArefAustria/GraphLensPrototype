@@ -22,6 +22,7 @@ Typical usage
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import shutil
@@ -69,12 +70,13 @@ OUTPUT_SCHEMA: dict = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "subject":   {"type": "string"},
-                    "predicate": {"type": "string"},
-                    "object":    {"type": "string"},
-                    "evidence":  {"type": "string"},
+                    "subject":         {"type": "string"},
+                    "predicate":       {"type": "string"},
+                    "object":          {"type": "string"},
+                    "source_sentence": {"type": "string"},
+                    "confidence":      {"type": "number"},
                 },
-                "required": ["subject", "predicate", "object", "evidence"],
+                "required": ["subject", "predicate", "object", "source_sentence", "confidence"],
                 "additionalProperties": False,
             },
         },
@@ -170,6 +172,166 @@ def _merge(base: dict, additions: dict) -> dict:
             existing_triples.add(key)
 
     return base
+
+
+# ---------------------------------------------------------------------------
+# Provenance resolution
+#
+# The model can quote a source_sentence, but it cannot reliably know its own
+# true character offset or page number in the original document — those are
+# resolved here by searching the real document text, not asked of the model.
+# ---------------------------------------------------------------------------
+
+PAGE_BREAK = "\f"  # page separator convention shared with scripts/pdf_to_text.py
+
+# Single-character substitutions so a normalized search still yields offsets
+# valid in the *original* string (str.translate preserves length/position).
+_TYPO_NORMALIZE = {
+    "‘": "'", "’": "'",   # curly single quotes
+    "“": '"', "”": '"',  # curly double quotes
+    "–": "-", "—": "-",  # en/em dash
+}
+
+
+def _pdf_full_text(pdf_path: str | Path) -> str:
+    """Extract per-page text from *pdf_path*, joined with page-break markers.
+
+    Used only to resolve provenance (page/char_span) by searching for the
+    model's quoted source_sentence — never sent to the model itself.
+    """
+    reader = PdfReader(str(pdf_path))
+    return PAGE_BREAK.join(page.extract_text() or "" for page in reader.pages)
+
+
+def _normalize_with_index_map(text: str) -> tuple[str, list[int]]:
+    """Collapse whitespace runs to a single space and fold typographic
+    variants to ASCII, returning the normalized string plus a list mapping
+    each of its characters back to its offset in the original *text*.
+
+    A PDF's extracted text wraps mid-sentence at the original layout's line
+    breaks, while the model quotes sentences with plain spaces -- normalizing
+    whitespace (not just typography) is what lets those still match, without
+    losing the ability to map a match back to a real offset in the
+    un-normalized document text.
+    """
+    out_chars: list[str] = []
+    index_map: list[int] = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch.isspace():
+            out_chars.append(" ")
+            index_map.append(i)
+            j = i + 1
+            while j < n and text[j].isspace():
+                j += 1
+            i = j
+        else:
+            out_chars.append(_TYPO_NORMALIZE.get(ch, ch))
+            index_map.append(i)
+            i += 1
+    return "".join(out_chars), index_map
+
+
+def _normalize(text: str) -> str:
+    """Same normalization as :func:`_normalize_with_index_map`, string only."""
+    normalized, _ = _normalize_with_index_map(text)
+    return normalized.strip()
+
+
+_FUZZY_ANCHOR_WORDS = 5     # leading words used to locate a search window for the fuzzy pass
+_FUZZY_WINDOW       = 400   # chars of slack searched around the anchor
+_FUZZY_MIN_RATIO    = 0.6   # min (matched length / quote length) to accept a fuzzy match
+
+
+def _fuzzy_locate(norm_full: str, index_map: list[int], norm_quote: str) -> tuple[int, int] | None:
+    """Best-effort match for a *paraphrased* quote (the prompt allows "close
+    paraphrase", so an exact/whitespace-normalized substring won't always
+    exist — e.g. the model drops a trailing parenthetical the source has).
+
+    Anchors on the quote's first few words to find a plausible region, then
+    finds the longest common contiguous run between that region and the
+    quote via :class:`difflib.SequenceMatcher`, accepting it only if it
+    covers a large enough fraction of the quote to be a meaningful match.
+    """
+    words = norm_quote.split()
+    if not words:
+        return None
+
+    anchor = " ".join(words[:_FUZZY_ANCHOR_WORDS])
+    anchor_idx = norm_full.find(anchor)
+    if anchor_idx == -1:
+        return None
+
+    window_start = max(0, anchor_idx - 50)
+    window_end = min(len(norm_full), anchor_idx + len(norm_quote) + _FUZZY_WINDOW)
+    window = norm_full[window_start:window_end]
+
+    matcher = difflib.SequenceMatcher(None, window, norm_quote, autojunk=False)
+    block = matcher.find_longest_match(0, len(window), 0, len(norm_quote))
+    if block.size == 0 or block.size / len(norm_quote) < _FUZZY_MIN_RATIO:
+        return None
+
+    norm_start = window_start + block.a
+    norm_end = norm_start + block.size
+    start = index_map[norm_start]
+    end_idx = min(norm_end, len(index_map)) - 1
+    end = index_map[end_idx] + 1
+    return start, end
+
+
+def _locate_source_sentence(
+    full_text: str,
+    norm_full: str,
+    index_map: list[int],
+    quote: str,
+) -> tuple[int, int] | None:
+    """Find *quote* in *full_text*, returning its ``(start, end)`` char offsets.
+
+    Tries, in order: an exact match, a whitespace/typography-normalized
+    match, then a bounded fuzzy match for paraphrased quotes (see
+    :func:`_fuzzy_locate`). Returns ``None`` if none of these locate it.
+    """
+    if not quote:
+        return None
+
+    idx = full_text.find(quote)
+    if idx != -1:
+        return idx, idx + len(quote)
+
+    norm_quote = _normalize(quote)
+    if not norm_quote:
+        return None
+
+    idx = norm_full.find(norm_quote)
+    if idx != -1:
+        start = index_map[idx]
+        end_idx = min(idx + len(norm_quote), len(index_map)) - 1
+        end = index_map[end_idx] + 1
+        return start, end
+
+    return _fuzzy_locate(norm_full, index_map, norm_quote)
+
+
+def _attach_provenance(relations: list[dict], full_text: str) -> None:
+    """Resolve and attach ``page``/``char_span`` for each relation, in place.
+
+    ``page`` is 1-based, computed by counting :data:`PAGE_BREAK` markers
+    before the match; it is ``None`` when *full_text* has no page markers
+    (e.g. plain scraped text) or the source_sentence can't be located.
+    """
+    norm_full, index_map = _normalize_with_index_map(full_text)
+    for rel in relations:
+        span = _locate_source_sentence(
+            full_text, norm_full, index_map, rel.get("source_sentence", "")
+        )
+        if span is None:
+            rel["page"] = None
+            rel["char_span"] = None
+            continue
+        start, end = span
+        rel["page"] = full_text.count(PAGE_BREAK, 0, start) + 1
+        rel["char_span"] = [start, end]
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +582,12 @@ def extract(
     chunk_dir:   If given (with *chunk_pages*), save each page-range chunk as
                  ``chunk_NNN.pdf`` and its extraction as
                  ``chunk_NNN_extraction.txt`` in this directory.
+
+    When *pdf_path* is given (with or without *chunk_pages*), each returned
+    relation is stamped with ``page`` and ``char_span`` — resolved by
+    searching the PDF's own extracted text for the relation's
+    ``source_sentence``, not reported by the model. Both are ``None`` if the
+    sentence can't be located verbatim.
     """
     system_prompt = _build_system_prompt(domain)
 
@@ -464,6 +632,9 @@ def extract(
     if verify:
         result = _verify_pass_pdf(client, file_id, result, domain=domain)
 
+    if pdf_path:
+        _attach_provenance(result["relations"], _pdf_full_text(pdf_path))
+
     return result
 
 
@@ -499,6 +670,12 @@ def extract_from_text(
                    extracted entities/relations to ``chunk_NNN_extraction.txt``
                    in this directory (created if needed) — useful for inspecting
                    what each chunk actually contributed.
+
+    Each returned relation is stamped with ``page`` and ``char_span`` —
+    resolved by searching *text* itself for the relation's
+    ``source_sentence``, not reported by the model. ``page`` is only
+    meaningful if *text* contains form-feed (``\\f``) page markers (as
+    produced by ``scripts/pdf_to_text.py``); otherwise it is ``None``.
     """
     system_prompt = _build_system_prompt(domain)
     chunks = _chunk_text(text, chunk_size, chunk_overlap) if chunk_size else [text]
@@ -539,6 +716,8 @@ def extract_from_text(
 
     if verify:
         result = _verify_pass_text(client, text, title, result, domain=domain)
+
+    _attach_provenance(result["relations"], text)
 
     return result
 
@@ -650,7 +829,15 @@ def format_result(result: dict) -> str:
     lines += [f"\n{'=' * 60}", f"RELATIONS ({len(relations)})", "=" * 60]
     for r in relations:
         lines.append(f"  {r['subject']}  —[{r['predicate']}]→  {r['object']}")
-        lines.append(f"    evidence: {r['evidence']}")
+        lines.append(f"    source: {r['source_sentence']}")
+        details = [f"confidence={r['confidence']}"] if "confidence" in r else []
+        if r.get("page") is not None:
+            details.append(f"page={r['page']}")
+        if r.get("char_span") is not None:
+            start, end = r["char_span"]
+            details.append(f"char_span={start}:{end}")
+        if details:
+            lines.append(f"    {', '.join(details)}")
     lines.append("")
 
     return "\n".join(lines)
@@ -663,6 +850,11 @@ def pretty_print(result: dict) -> None:
 
 _ENTITY_LINE_RE   = re.compile(r"^  \[(?P<type>[^\]]+)\] (?P<name>.+)$")
 _RELATION_LINE_RE = re.compile(r"^  (?P<subject>.+?)  —\[(?P<predicate>[^\]]+)\]→  (?P<object>.+)$")
+_RELATION_DETAILS_RE = re.compile(
+    r"confidence=(?P<confidence>[0-9.]+)"
+    r"(?:, page=(?P<page>\d+))?"
+    r"(?:, char_span=(?P<start>\d+):(?P<end>\d+))?"
+)
 
 
 def parse_extraction_text(text: str) -> dict:
@@ -695,16 +887,31 @@ def parse_extraction_text(text: str) -> dict:
         elif section == "relations":
             m = _RELATION_LINE_RE.match(line)
             if m and i + 1 < len(lines):
-                evidence = lines[i + 1].strip()
-                if evidence.lower().startswith("evidence:"):
-                    evidence = evidence[len("evidence:"):].strip()
-                relations.append({
-                    "subject":   m.group("subject").strip(),
-                    "predicate": m.group("predicate").strip(),
-                    "object":    m.group("object").strip(),
-                    "evidence":  evidence,
-                })
+                source_sentence = lines[i + 1].strip()
+                if source_sentence.lower().startswith("source:"):
+                    source_sentence = source_sentence[len("source:"):].strip()
                 i += 1
+
+                confidence, page, char_span = None, None, None
+                if i + 1 < len(lines):
+                    details = _RELATION_DETAILS_RE.search(lines[i + 1])
+                    if details:
+                        confidence = float(details.group("confidence"))
+                        if details.group("page"):
+                            page = int(details.group("page"))
+                        if details.group("start"):
+                            char_span = [int(details.group("start")), int(details.group("end"))]
+                        i += 1
+
+                relations.append({
+                    "subject":         m.group("subject").strip(),
+                    "predicate":       m.group("predicate").strip(),
+                    "object":          m.group("object").strip(),
+                    "source_sentence": source_sentence,
+                    "confidence":      confidence,
+                    "page":            page,
+                    "char_span":       char_span,
+                })
         i += 1
 
     return {"entities": entities, "relations": relations}

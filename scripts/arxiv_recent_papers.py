@@ -4,6 +4,8 @@ Fetch recently published arXiv papers on a topic since a given date.
 Example: all new papers in mobility/autonomous driving published since last Monday.
 """
 
+import argparse
+import json
 import os
 import re
 import time
@@ -11,6 +13,9 @@ import urllib.parse
 import urllib.request
 import feedparser
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from graphlens.metadata import build_pdf_metadata
 
 
 def last_monday(reference=None):
@@ -80,9 +85,42 @@ def safe_filename(entry, max_len=100):
     return f"{arxiv_id}_{title}.pdf"
 
 
+def _arxiv_date_published(entry):
+    """Extract the arXiv submission date (YYYY-MM-DD) from a feed entry."""
+    published = getattr(entry, "published", None)
+    if not published:
+        return None
+    try:
+        return datetime.strptime(published[:10], "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        return None
+
+
+def save_metadata(entry, filepath):
+    """Build and save a metadata record alongside the downloaded PDF at *filepath*."""
+    arxiv_id = entry.id.split("/abs/")[-1]
+    title = " ".join(entry.title.split())
+
+    record = build_pdf_metadata(
+        filepath,
+        source="arXiv",
+        title=title,
+        date_published=_arxiv_date_published(entry),
+    )
+    record["arxiv_id"] = arxiv_id
+    record["authors"] = [a.name for a in entry.authors]
+    record["abstract_url"] = entry.link
+
+    meta_path = Path(filepath).with_suffix(".json")
+    meta_path.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
+    return meta_path
+
+
 def download_papers(entries, out_dir="arxiv_papers", delay=3):
     """
-    Download the PDF for each entry into out_dir.
+    Download the PDF for each entry into out_dir, along with a metadata
+    record (title, authors, published date, sha256, etc.) as a sibling
+    .json file.
     `delay` seconds between requests, per arXiv's usage guidelines.
     """
     os.makedirs(out_dir, exist_ok=True)
@@ -102,6 +140,8 @@ def download_papers(entries, out_dir="arxiv_papers", delay=3):
             )
             with urllib.request.urlopen(req) as resp, open(filepath, "wb") as f:
                 f.write(resp.read())
+            meta_path = save_metadata(entry, filepath)
+            print(f"  Metadata saved: {os.path.basename(meta_path)}")
         except Exception as e:
             print(f"  Failed: {e}")
 
@@ -123,12 +163,35 @@ def print_results(entries):
         print(f"  Link: {link}\n")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Fetch recently published arXiv papers on a topic since a given date."
+    )
+    parser.add_argument(
+        "--keywords",
+        nargs="+",
+        default=["driving safety", "autonomous vehicles", "self-driving cars"],
+        help="Phrases to search in title/abstract (space-separated; quote multi-word "
+        "phrases), OR'd together.",
+    )
+    parser.add_argument(
+        "--start-date",
+        default=None,
+        help="Only include papers submitted on or after this date, YYYY-MM-DD "
+        "(default: most recent Monday).",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    # ---- Configure your search here ----
-    keywords = ["driving safety", "autonomous vehicles", "self-driving cars"]
+    args = parse_args()
+
+    keywords = args.keywords
     categories = ["cs.RO", "cs.CV", "cs.LG", "eess.SY"]
-    start_date = last_monday()
-    # -------------------------------------
+    if args.start_date:
+        start_date = datetime.strptime(args.start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    else:
+        start_date = last_monday()
 
     query = build_query(keywords, categories, start_date)
     print(f"Query: {query}\n")
