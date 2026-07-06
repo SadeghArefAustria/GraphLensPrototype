@@ -103,6 +103,17 @@ class KGLoader:
         MATCH (s:Entity {{name: $subject}})
         MATCH (o:Entity {{name: $object}})
         MERGE (s)-[r:{predicate}]->(o)
-        SET   r.evidence = $evidence
+        SET   r.source_sentence = $source_sentence,
+              r.confidence      = $confidence,
+              r.page            = $page,
+              r.char_span       = $char_span
         """
-        tx.run(cypher, **rel)
+        tx.run(
+            cypher,
+            subject=rel["subject"],
+            object=rel["object"],
+            source_sentence=rel.get("source_sentence"),
+            confidence=rel.get("confidence"),
+            page=rel.get("page"),
+            char_span=rel.get("char_span"),
+        )

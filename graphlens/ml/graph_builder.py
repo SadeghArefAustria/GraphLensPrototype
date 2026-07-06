@@ -92,18 +92,24 @@ class KGGraph:
                 key = (t.head, t.relation, t.tail)
                 if key not in seen_triples:
                     seen_triples.add(key)
-                    # Retrieve evidence if stored on the graph edge
+                    # Retrieve provenance if stored on the graph edge
                     edge_data = g.graph.get_edge_data(t.head, t.tail) or {}
-                    evidence = ""
+                    source_sentence, confidence, page, char_span = "", None, None, None
                     if edge_data:
                         first = next(iter(edge_data.values()))
-                        evidence = first.get("evidence", "")
+                        source_sentence = first.get("source_sentence", "")
+                        confidence = first.get("confidence")
+                        page = first.get("page")
+                        char_span = first.get("char_span")
                     merged_relations.append(
                         {
                             "subject": t.head,
                             "predicate": t.relation,
                             "object": t.tail,
-                            "evidence": evidence,
+                            "source_sentence": source_sentence,
+                            "confidence": confidence,
+                            "page": page,
+                            "char_span": char_span,
                         }
                     )
 
@@ -189,7 +195,10 @@ class KGGraph:
                 key=t.relation,
                 relation=t.relation,
                 relation_id=t.relation_id,
-                evidence=r_data.get("evidence", ""),
+                source_sentence=r_data.get("source_sentence", ""),
+                confidence=r_data.get("confidence"),
+                page=r_data.get("page"),
+                char_span=r_data.get("char_span"),
             )
 
     # ------------------------------------------------------------------

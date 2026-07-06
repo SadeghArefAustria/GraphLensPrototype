@@ -74,10 +74,13 @@ def _merge_kg_dicts(dicts: list[dict]) -> dict:
         ],
         "relations": [
             {
-                "subject":   t.head,
-                "predicate": t.relation,
-                "object":    t.tail,
-                "evidence":  "",
+                "subject":         t.head,
+                "predicate":       t.relation,
+                "object":          t.tail,
+                "source_sentence": "",
+                "confidence":      None,
+                "page":            None,
+                "char_span":       None,
             }
             for t in merged.triples
         ],
