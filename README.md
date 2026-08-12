@@ -26,9 +26,7 @@ GraphLensPrototype/
 │       ├── graph_builder.py # KGGraph — NetworkX + int encodings + splits
 │       └── link_prediction.py # HeuristicPredictor · PyKEENPredictor
 ├── scripts/                 # CLI entry points
-│   ├── extract_kg.py        # PDF → KG JSON
-│   ├── load_to_neo4j.py     # KG JSON → Neo4j
-│   └── predict_links.py     # link prediction CLI
+│   └── extract_kg.py        # PDF → KG JSON
 ├── notebooks/
 │   └── link_prediction.ipynb  # interactive exploration
 ├── data/
@@ -78,7 +76,7 @@ cp .env.example .env      # macOS / Linux
 | `NEO4J_USER` | e.g. `neo4j` |
 | `NEO4J_PASSWORD` | Your Neo4j password |
 
-### 3 — Extract → Load → Predict
+### 3 — Extract and load
 
 ```bash
 # Extract KG from a PDF
@@ -88,19 +86,9 @@ python scripts/extract_kg.py data/input/paper.pdf --out data/output/results.json
 python scripts/extract_kg.py data/input/paper.pdf --out data/output/results.json \
     --chunk-pages 5 --save-chunks
 
-# Load into Neo4j
-python scripts/load_to_neo4j.py data/output/results.json --password your-password
-
-# Run link prediction (heuristic baseline)
-python scripts/predict_links.py data/output/results.json
-
-# Merge multiple extractions and use TransE
-python scripts/predict_links.py data/output/doc1.json data/output/doc2.json \
-    --model TransE --epochs 200
-
-# Predict specific tails
-python scripts/predict_links.py data/output/results.json \
-    --predict-head "TU Graz" --predict-relation PARTNERED_WITH --top-k 5
+# Load the extracted KG into Neo4j
+python scripts/load_to_neo4j.py data/output/results.json \
+  --password your-password
 ```
 
 ---

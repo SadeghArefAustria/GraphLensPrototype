@@ -89,6 +89,9 @@ OUTPUT_SCHEMA: dict = {
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+# System prompt construction
+# Build the system prompt for the extraction call, optionally including a domain hint.
+
 def _build_system_prompt(domain: str | None) -> str:
     domain_section = (
         _DOMAIN_SECTION.format(domain=domain) if domain else ""
@@ -104,7 +107,7 @@ def _build_system_prompt(domain: str | None) -> str:
         + domain_section
     )
 
-
+# Command-line argument parsing
 def _stream_extract(
     client:         anthropic.Anthropic,
     messages:       list[dict],
@@ -182,7 +185,7 @@ def _merge(base: dict, additions: dict) -> dict:
 # resolved here by searching the real document text, not asked of the model.
 # ---------------------------------------------------------------------------
 
-PAGE_BREAK = "\f"  # page separator convention shared with scripts/pdf_to_text.py
+PAGE_BREAK = "\f"  # form-feed page separator used for PDF page chunks
 
 # Single-character substitutions so a normalized search still yields offsets
 # valid in the *original* string (str.translate preserves length/position).
@@ -675,7 +678,7 @@ def extract_from_text(
     resolved by searching *text* itself for the relation's
     ``source_sentence``, not reported by the model. ``page`` is only
     meaningful if *text* contains form-feed (``\\f``) page markers (as
-    produced by ``scripts/pdf_to_text.py``); otherwise it is ``None``.
+    produced by an external PDF-to-text step); otherwise it is ``None``.
     """
     system_prompt = _build_system_prompt(domain)
     chunks = _chunk_text(text, chunk_size, chunk_overlap) if chunk_size else [text]
