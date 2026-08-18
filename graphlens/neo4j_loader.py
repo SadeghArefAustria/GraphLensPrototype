@@ -99,14 +99,21 @@ class KGLoader:
         extraction model, so f-string interpolation is safe here.
         """
         predicate = rel["predicate"]
+        source_identity = (
+            "{source_file_id: $source_file_id}"
+            if rel.get("source_file_id")
+            else ""
+        )
         cypher = f"""
         MATCH (s:Entity {{name: $subject}})
         MATCH (o:Entity {{name: $object}})
-        MERGE (s)-[r:{predicate}]->(o)
+        MERGE (s)-[r:{predicate} {source_identity}]->(o)
         SET   r.source_sentence = $source_sentence,
               r.confidence      = $confidence,
               r.page            = $page,
-              r.char_span       = $char_span
+              r.char_span       = $char_span,
+              r.source_file_id  = $source_file_id,
+              r.source_file_link = $source_file_link
         """
         tx.run(
             cypher,
@@ -116,4 +123,6 @@ class KGLoader:
             confidence=rel.get("confidence"),
             page=rel.get("page"),
             char_span=rel.get("char_span"),
+            source_file_id=rel.get("source_file_id"),
+            source_file_link=rel.get("source_file_link"),
         )

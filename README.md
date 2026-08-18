@@ -82,6 +82,16 @@ cp .env.example .env      # macOS / Linux
 # Extract KG from a PDF
 python scripts/extract_kg.py data/input/paper.pdf --out data/output/results.json
 
+# Include the source URL on every extracted relation
+python scripts/extract_kg.py data/input/paper.pdf \
+  --source-link https://arxiv.org/abs/2606.09292v1 \
+  --out data/output/results.json
+
+# Or read doc_id and abstract_url from an existing metadata JSON file
+python scripts/extract_kg.py data/input/paper.pdf \
+  --metadata data/input/arxiv_papers/paper.json \
+  --out data/output/results.json
+
 # Split into 5-page chunks for finer-grained recall, saving each chunk + its extraction
 python scripts/extract_kg.py data/input/paper.pdf --out data/output/results.json \
     --chunk-pages 5 --save-chunks

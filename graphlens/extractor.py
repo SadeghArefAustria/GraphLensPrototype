@@ -559,6 +559,8 @@ def extract(
     pdf_path:    str | Path | None = None,
     chunk_pages: int | None = None,
     chunk_dir:   str | Path | None = None,
+    source_file_id:   str | None = None,
+    source_file_link: str | None = None,
 ) -> dict:
     """Run KG extraction on an already-uploaded PDF document.
 
@@ -585,6 +587,10 @@ def extract(
     chunk_dir:   If given (with *chunk_pages*), save each page-range chunk as
                  ``chunk_NNN.pdf`` and its extraction as
                  ``chunk_NNN_extraction.txt`` in this directory.
+    source_file_id: Stable identifier for the source file to add to every
+                    returned relation.
+    source_file_link: URL or other link for the source file to add to every
+                       returned relation.
 
     When *pdf_path* is given (with or without *chunk_pages*), each returned
     relation is stamped with ``page`` and ``char_span`` — resolved by
@@ -637,6 +643,10 @@ def extract(
 
     if pdf_path:
         _attach_provenance(result["relations"], _pdf_full_text(pdf_path))
+
+    for relation in result["relations"]:
+        relation["source_file_id"] = source_file_id
+        relation["source_file_link"] = source_file_link
 
     return result
 

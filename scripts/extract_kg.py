@@ -21,7 +21,7 @@ from pathlib import Path
 import anthropic
 
 from graphlens.extractor import upload_pdf, extract, pretty_print, format_result
-from graphlens.metadata import doc_id_for_file
+from graphlens.metadata import build_pdf_metadata
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,6 +48,19 @@ def parse_args() -> argparse.Namespace:
         "--domain",
         metavar="DOMAIN",
         help='Optional domain hint, e.g. "academic research", "news" (default: none).',
+    )
+    parser.add_argument(
+        "--source-link",
+        metavar="URL",
+        help="URL or other link to the source file, saved on every relation.",
+    )
+    parser.add_argument(
+        "--metadata",
+        metavar="PATH",
+        help=(
+            "JSON metadata file for the source; uses doc_id and the first "
+            "available link from source_file_link, abstract_url, url, or link."
+        ),
     )
     parser.add_argument(
         "--verify",
@@ -102,6 +115,27 @@ def main() -> None:
 
     client = anthropic.Anthropic()
 
+    source_file_id = args.file_id
+    source_file_link = args.source_link
+    if args.pdf:
+        metadata = build_pdf_metadata(args.pdf, source_file_link=source_file_link)
+        source_file_id = metadata["doc_id"]
+        source_file_link = metadata["source_file_link"] or None
+    if args.metadata:
+        metadata_path = Path(args.metadata)
+        if not metadata_path.is_file():
+            print(f"Error: metadata file not found: {metadata_path}", file=sys.stderr)
+            sys.exit(1)
+        source_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        source_file_id = source_metadata.get("doc_id") or source_file_id
+        source_file_link = (
+            source_file_link
+            or source_metadata.get("source_file_link")
+            or source_metadata.get("abstract_url")
+            or source_metadata.get("url")
+            or source_metadata.get("link")
+        )
+
     file_id         = args.file_id
     uploaded_now    = False
     needs_whole_pdf = not args.chunk_pages or args.verify
@@ -123,6 +157,8 @@ def main() -> None:
             pdf_path=args.pdf,
             chunk_pages=args.chunk_pages,
             chunk_dir=chunk_dir,
+            source_file_id=source_file_id,
+            source_file_link=source_file_link,
         )
     finally:
         if uploaded_now and not args.keep_file:
@@ -133,7 +169,7 @@ def main() -> None:
                 print(f"Warning: could not delete {file_id}: {exc}", file=sys.stderr)
 
     if args.pdf:
-        result = {"doc_id": doc_id_for_file(args.pdf), **result}
+        result = {"doc_id": source_file_id, **result}
 
     pretty_print(result)
 

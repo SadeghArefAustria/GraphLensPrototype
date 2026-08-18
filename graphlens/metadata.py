@@ -66,6 +66,7 @@ def build_pdf_metadata(
     pdf_path: str | Path,
     *,
     source: str | None = None,
+    source_file_link: str | None = None,
     title: str | None = None,
     date_published: str | None = None,
 ) -> dict:
@@ -76,6 +77,7 @@ def build_pdf_metadata(
     pdf_path:       Path to the local PDF file.
     source:         Where the document came from (e.g. "Acme Corp investor
                      relations"). Not derivable from the file — pass it in.
+    source_file_link: URL or other link to the source file, when available.
     title:          Document title. Falls back to the PDF's own metadata
                      title, then to the filename stem, if not given.
     date_published: Publication date (``YYYY-MM-DD``). Falls back to the
@@ -84,8 +86,8 @@ def build_pdf_metadata(
     Returns
     -------
     A dict with the fields: ``doc_id``, ``original_filename``, ``title``,
-    ``source``, ``date_published``, ``date_ingested``, ``page_count``,
-    ``sha256``.
+    ``source``, ``source_file_link``, ``date_published``, ``date_ingested``,
+    ``page_count``, ``sha256``.
     """
     pdf_path = Path(pdf_path)
     sha256 = sha256_of_file(pdf_path)
@@ -98,6 +100,7 @@ def build_pdf_metadata(
         "original_filename": pdf_path.name,
         "title": title or pdf_meta.title or pdf_path.stem,
         "source": source or "",
+        "source_file_link": source_file_link or "",
         "date_published": date_published or _parse_pdf_date(pdf_meta.get("/CreationDate")) or "",
         "date_ingested": datetime.now().date().isoformat(),
         "page_count": len(reader.pages),

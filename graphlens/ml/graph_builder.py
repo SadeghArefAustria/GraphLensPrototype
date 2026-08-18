@@ -95,12 +95,15 @@ class KGGraph:
                     # Retrieve provenance if stored on the graph edge
                     edge_data = g.graph.get_edge_data(t.head, t.tail) or {}
                     source_sentence, confidence, page, char_span = "", None, None, None
+                    source_file_id, source_file_link = None, None
                     if edge_data:
                         first = next(iter(edge_data.values()))
                         source_sentence = first.get("source_sentence", "")
                         confidence = first.get("confidence")
                         page = first.get("page")
                         char_span = first.get("char_span")
+                        source_file_id = first.get("source_file_id")
+                        source_file_link = first.get("source_file_link")
                     merged_relations.append(
                         {
                             "subject": t.head,
@@ -110,6 +113,8 @@ class KGGraph:
                             "confidence": confidence,
                             "page": page,
                             "char_span": char_span,
+                            "source_file_id": source_file_id,
+                            "source_file_link": source_file_link,
                         }
                     )
 
@@ -199,6 +204,8 @@ class KGGraph:
                 confidence=r_data.get("confidence"),
                 page=r_data.get("page"),
                 char_span=r_data.get("char_span"),
+                source_file_id=r_data.get("source_file_id"),
+                source_file_link=r_data.get("source_file_link"),
             )
 
     # ------------------------------------------------------------------
