@@ -16,7 +16,15 @@ merges rather than duplicates nodes and relationships.
 
 from __future__ import annotations
 
+import re
+
 from neo4j import GraphDatabase
+
+
+VALID_ENTITY_TYPES = {
+    "PERSON", "ORG", "LOCATION", "EVENT", "CONCEPT", "PRODUCT", "DATE", "OTHER",
+}
+VALID_CYPHER_IDENTIFIER = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 class KGLoader:
@@ -53,6 +61,7 @@ class KGLoader:
         """
         entities  = data.get("entities", [])
         relations = data.get("relations", [])
+        self._validate_for_cypher(entities, relations)
 
         with self._driver.session() as session:
             session.execute_write(self._ensure_constraint)
@@ -64,6 +73,23 @@ class KGLoader:
                 session.execute_write(self._merge_relation, rel)
 
         return len(entities), len(relations)
+
+    @staticmethod
+    def _validate_for_cypher(entities: list[dict], relations: list[dict]) -> None:
+        """Validate the model-derived identifiers interpolated into Cypher."""
+        invalid_types = sorted({e.get("type") for e in entities} - VALID_ENTITY_TYPES)
+        if invalid_types:
+            raise ValueError(
+                "Unsupported entity type(s): " + ", ".join(map(str, invalid_types))
+            )
+        invalid_predicates = sorted(
+            {r.get("predicate", "") for r in relations
+             if not VALID_CYPHER_IDENTIFIER.fullmatch(r.get("predicate", ""))}
+        )
+        if invalid_predicates:
+            raise ValueError(
+                "Invalid relation predicate(s): " + ", ".join(map(str, invalid_predicates))
+            )
 
     # ------------------------------------------------------------------
     # Transaction helpers (called inside execute_write)
@@ -78,16 +104,17 @@ class KGLoader:
 
     @staticmethod
     def _merge_entity(tx, entity: dict) -> None:
-        """Merge a node with :Entity and its specific type label.
+        """Merge a node by its stable :Entity/name identity, then type it.
 
-        Entity types come from a fixed enum (PERSON, ORG, LOCATION, EVENT,
-        CONCEPT, PRODUCT, OTHER), so f-string interpolation is safe here.
+        Entity types come from a fixed validated enum, so f-string interpolation
+        is safe here.
         """
         label = entity["type"]
         cypher = f"""
-        MERGE (e:Entity:{label} {{name: $name}})
+        MERGE (e:Entity {{name: $name}})
         SET   e.type        = $type,
-              e.description = $description
+              e.description = $description,
+              e:{label}
         """
         tx.run(cypher, **entity)
 
@@ -95,8 +122,8 @@ class KGLoader:
     def _merge_relation(tx, rel: dict) -> None:
         """Merge a typed directed edge between two entity nodes.
 
-        Predicates are SCREAMING_SNAKE_CASE strings produced by the
-        extraction model, so f-string interpolation is safe here.
+        Predicates are validated SCREAMING_SNAKE_CASE strings, so f-string
+        interpolation is safe here.
         """
         predicate = rel["predicate"]
         source_identity = (

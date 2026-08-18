@@ -29,10 +29,16 @@ pyg = [
     "torch>=2.0",
     "torch-geometric>=2.4",
 ]
+ui = [
+    "streamlit>=1.39",
+    "pyvis>=0.3.2",
+    "python-dotenv>=1.0",
+]
 # All optional extras
 all = [
     "graphlens[ml]",
     "graphlens[pyg]",
+    "graphlens[ui]",
 ]
 
 [tool.setuptools.packages.find]

@@ -103,6 +103,22 @@ python scripts/load_to_neo4j.py data/output/results.json \
 
 ---
 
+## Web interface
+
+The Streamlit UI lets a user upload a PDF, extract its knowledge graph, load it
+into Neo4j, and inspect the graph that Neo4j stored.
+
+```bash
+pip install -e ".[ui]"
+streamlit run app.py
+```
+
+Copy `.env.example` to `.env` and provide the Anthropic and Neo4j credentials
+before starting the app. Each extraction is saved as
+`data/output/<document-id>.json`. The visualization shows only relationships
+whose `source_file_id` belongs to the uploaded document, keeping a document's
+graph distinct from the rest of the database.
+
 ## ML module
 
 ### Building a graph
